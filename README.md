@@ -19,7 +19,25 @@ docker run --rm projectdiscovery/nuclei -t ssl -target dh480.badssl.com
 
 ```
 
-# Build a custom container (nmap)
+# Build a custom container (nmap) and run it
 ```
 docker build -t nmap -f ./nmap.Dockerfile
+
+docker run --rm nmap -A -T4 scanme.nmap.org
+```
+
+# Launch example vulnerable web applications
+```
+docker compose up
+```
+
+# Launch attack tools through docker compose
+```
+docker compose run nuclei wordpress
+
+docker compose run zap http://wordpress
+
+docker compose run wpscan http://wordpress/wp-admin/
+
+docker compose run sqlmap http://wordpress
 ```
