@@ -1,0 +1,149 @@
+version: '3'
+
+services:
+  # vulnerable webapp
+  wordpress:
+    image: wordpress:5.9.2-apache
+    depends_on:
+      - mysql
+    ports:
+      - 8080:80
+      - 80:80
+    networks:
+      - attack
+    environment:
+      WORDPRESS_DB_HOST: 'mysql'
+      WORDPRESS_DB_USER: 'attack'
+      WORDPRESS_DB_PASSWORD: 'attack'
+      WORDPRESS_DB_NAME: 'attack'
+      WORDPRESS_CONFIG_EXTRA: |
+        define('WP_SITEURL', 'http://' . $$_SERVER['SERVER_NAME']);
+        define('WP_HOME', 'http://' . $$_SERVER['SERVER_NAME']);
+
+  # vulnerable services
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:5.0.2
+    depends_on:
+      - mysql
+    ports:
+      - 8081:80
+    environment:
+      PMA_HOST: 'mysql'
+      PMA_USER: 'attack'
+      PMA_PASSWORD: 'attack'
+    networks:
+      - attack
+
+  mysql:
+    image: 'mysql/mysql-server:8.0'
+    ports:
+      - '${FORWARD_DB_PORT:-3306}:3306'
+    environment:
+      MYSQL_ROOT_PASSWORD: 'password'
+      MYSQL_ROOT_HOST: "%"
+      MYSQL_DATABASE: 'attack'
+      MYSQL_USER: 'attack'
+      MYSQL_PASSWORD: 'attack'
+      MYSQL_ALLOW_EMPTY_PASSWORD: 1
+    volumes:
+      - 'mysql:/var/lib/mysql'
+    networks:
+      - attack
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-pattack" ]
+      retries: 3
+      timeout: 5s
+
+  nuclei:
+    image: projectdiscovery/nuclei
+    volumes:
+      - ./nuclei-configs:/root/.nuclei
+      - ./nuclei-templates:/root/nuclei-templates
+      - ./nuclei-reports:/root/reports
+      - ./targets.txt:/root/targets.txt
+    profiles:
+      - donotstart
+    networks:
+      - attack
+    entrypoint:
+      [
+        "nuclei",
+        "-concurrency",
+        "120",
+        "-retries",
+        "0",
+        "-t",
+        "http/cves",
+        "-t",
+        "http/vulnerabilities",
+        "-t",
+        "http/misconfiguration",
+        "-t",
+        "http/exposed-panels",
+        "-t",
+        "ssl",
+        "-ni",
+        "-stats",
+        "-si",
+        "1",
+        "-o",
+        "/root/reports/nuclei-report.txt",
+        "--target"
+      ]
+
+  zap:
+    image: owasp/zap2docker-stable
+    profiles:
+      - donotstart
+    user: root
+    volumes:
+      - ./zap-work:/zap/wrk
+    networks:
+      - attack
+    entrypoint: [ "zap-baseline.py", "-w", "reports.html", "-t" ]
+
+  wpscan:
+    image: wpscanteam/wpscan
+    user: root
+    profiles:
+      - donotstart
+    volumes:
+      - ./wpscan-reports:/wpscan/reports
+    networks:
+      - attack
+    entrypoint:
+      [
+        "wpscan",
+        "--no-banner",
+        "--format",
+        "cli-no-color",
+        "--output",
+        "/wpscan/reports/wpscan-report.html",
+        "--url"
+      ]
+
+  sqlmap:
+    image: googlesky/sqlmap
+    user: root
+    profiles:
+      - donotstart
+    networks:
+      - attack
+    volumes:
+      - ./sqlmap-reports:/sqlmap/reports
+    entrypoint: [
+      "python",
+      "sqlmap-dev/sqlmap.py",
+      "--batch",
+      "--output-dir=/sqlmap/reports",
+      "--forms",
+      "-u"
+    ]
+
+networks:
+  attack:
+    driver: bridge
+
+volumes:
+  mysql:
+    driver: local
