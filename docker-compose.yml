@@ -60,7 +60,6 @@ services:
       - ./nuclei-configs:/root/.nuclei
       - ./nuclei-templates:/root/nuclei-templates
       - ./nuclei-reports:/root/reports
-      - ./targets.txt:/root/targets.txt
     profiles:
       - donotstart
     networks:
